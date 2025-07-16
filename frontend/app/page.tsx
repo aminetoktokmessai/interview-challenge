@@ -1,59 +1,62 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from 'react';
-
-const API = "http://localhost:8080";
-
-type SampleEntity = { id: number; name: string };
+import { useEffect, useState, useCallback } from 'react';
+import { getPatients, getMedications } from './api';
+import { Patient, Medication } from './types';
+import PatientList from './components/PatientList';
+import PatientForm from './components/PatientForm';
+import MedicationForm from './components/MedicationForm';
+import AssignmentForm from './components/AssignmentForm';
 
 export default function Home() {
-  const [samples, setSamples] = useState<SampleEntity[]>([]);
-  const [name, setName] = useState('');
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [medications, setMedications] = useState<Medication[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchSamples = async () => {
-    const res = await fetch(`${API}/sample`);
-    const data = await res.json();
-    setSamples(data);
-  };
 
-  const createSample = async () => {
-    if (!name.trim()) return;
-    await fetch(`${API}/sample`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name }),
-    });
-    setName('');
-    fetchSamples();
-  };
-
-  useEffect(() => {
-    fetchSamples();
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [patientsRes, medicationsRes] = await Promise.all([
+        getPatients(),
+        getMedications()
+      ]);
+      setPatients(patientsRes);
+      setMedications(medicationsRes);
+    } catch (err) {
+      setError("Failed to fetch data. Make sure the backend server is running.");
+      console.error(err);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
 
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
   return (
-    <div className="p-8 font-sans">
-      <h1 className="text-2xl font-bold mb-4">Sample Entity Manager</h1>
-
-      <div className="flex gap-2 mb-4">
-        <input
-          className="border px-2 py-1 rounded w-64"
-          placeholder="Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <button onClick={createSample} className="bg-blue-600 text-white px-4 py-1 rounded">
-          Add
-        </button>
+    <main className="container mx-auto p-4 md:p-8">
+      <h1 className="text-4xl font-bold text-center mb-8">Oxyera Medication Tracker</h1>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div>
+            <PatientForm onPatientCreated={fetchData} />
+            <MedicationForm onMedicationCreated={fetchData} />
+            <AssignmentForm
+                patients={patients}
+                medications={medications}
+                onAssignmentCreated={fetchData}
+            />
+        </div>
+        <div>
+            {isLoading && <p>Loading...</p>}
+            {error && <p className="text-red-500">{error}</p>}
+            {!isLoading && !error && <PatientList patients={patients} />}
+        </div>
       </div>
-
-      <ul className="space-y-1">
-        {samples.map((s) => (
-          <li key={s.id} className="border-b pb-1">
-            #{s.id} - {s.name}
-          </li>
-        ))}
-      </ul>
-    </div>
+    </main>
   );
 }
